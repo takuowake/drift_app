@@ -1,24 +1,28 @@
 import 'package:drift_app/src/drift/todos.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   final database = MyDatabase();
-  runApp(MyApp(database: database));
+  final secureStorage = FlutterSecureStorage();
+  runApp(MyApp(database: database, secureStorage: secureStorage));
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({
     Key? key,
     required this.database,
+    required this.secureStorage,
   }) : super(key: key);
 
   final MyDatabase database;
+  final FlutterSecureStorage secureStorage;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: DriftSample(database: database),
+      home: DriftSample(database: database, secureStorage: secureStorage),
     );
   }
 }
@@ -27,9 +31,11 @@ class DriftSample extends StatefulWidget {
   const DriftSample({
     Key? key,
     required this.database,
+    required this.secureStorage,
   }) : super(key: key);
 
   final MyDatabase database;
+  final FlutterSecureStorage secureStorage;
 
   @override
   _DriftSampleState createState() => _DriftSampleState();
@@ -37,14 +43,18 @@ class DriftSample extends StatefulWidget {
 
 class _DriftSampleState extends State<DriftSample> {
   late SharedPreferences? _prefs;
+  late String? _secureValue;
   bool _isPrefsInitialized = false;
 
   @override
   void initState() {
     super.initState();
     _initSharedPreferences().then((_) {
-      setState(() {
-        _isPrefsInitialized = true;
+      _getSecureValue().then((value) {
+        setState(() {
+          _secureValue = value;
+          _isPrefsInitialized = true;
+        });
       });
     });
   }
@@ -52,6 +62,15 @@ class _DriftSampleState extends State<DriftSample> {
   Future<void> _initSharedPreferences() async {
     _prefs = await SharedPreferences.getInstance();
   }
+
+  Future<String?> _getSecureValue() async {
+    return widget.secureStorage.read(key: 'secureKey');
+  }
+
+  Future<void> _setSecureValue(String value) async {
+    await widget.secureStorage.write(key: 'secureKey', value: value);
+  }
+
 
   int get _todoCount => _prefs?.getInt('todoCount') ?? 0;
 
@@ -70,10 +89,16 @@ class _DriftSampleState extends State<DriftSample> {
     }
     return Scaffold(
       appBar: AppBar(title: Text('Todo Count: ${_todoCount ?? 0}')),
+
       body: SafeArea(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            if(_secureValue != null)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text('Secure Value: $_secureValue'),
+              ),
             Expanded(
               child: StreamBuilder(
                 stream: widget.database.watchEntries(),
@@ -109,8 +134,12 @@ class _DriftSampleState extends State<DriftSample> {
                         await widget.database.addTodo(
                           'test test test',
                         );
+                        final newValue = 'This is a secure value';
+                        await _setSecureValue('This is a secure value');
                         await _incrementTodoCount();
-                        setState(() {});
+                        setState(() {
+                          _secureValue = newValue;
+                        });
                       },
                     ),
                   ),
